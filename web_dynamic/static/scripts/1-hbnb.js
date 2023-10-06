@@ -1,21 +1,12 @@
-$('document').ready(() => {
-  const buttonCheckedIds = []
-  $('input').each((i, ipt) => {
-    $(ipt).change(() => {
-      const name = ipt.getAttribute('data-name');
-      const id = ipt.getAttribute('data-id');
-      const inputObj = {id: id, name: name};
-      if (ipt.checked) {
-        buttonCheckedIds.push(inputObj);
-      } else {
-        buttonCheckedIds.pop(inputObj);
-      };
-      $('.amenities h4').text('');
-      $.each(buttonCheckedIds, (i, obj) => {
-        $('.amenities h4').text(obj.name + ' ' + $('.amenities h4').text());
-	$('.amenities h4').append("&nbsp;");
-      });
-      //$('.amenities h4').append("&nbsp;");
-    });
-  });
-});
+/* Script that listen for changes on each INPUT checkbox tag */
+$('document').ready(function () {
+   const amenitiesId = {};
+   $('INPUT[type="checkbox"]').click(function () {
+     if ($(this).prop('checked')) {
+       amenitiesId[$(this).attr('data-id')] = $(this).attr('data-name');
+     } else {
+       delete amenitiesId[$(this).attr('data-id')];
+     }
+     $('.amenities h4').text(Object.values(amenitiesId).join(', '));
+   });
+ });

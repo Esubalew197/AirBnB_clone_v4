@@ -1,140 +1,95 @@
 #!/usr/bin/python3
-""" index module """
-
-
-from api.v1.views import user_views
-from flask import jsonify, abort, request
-from models import storage
+""" objects that handle all default RestFul API actions for Users """
 from models.user import User
-from models.state import State
+from models import storage
+from api.v1.views import app_views
+from flask import abort, jsonify, make_response, request
+from flasgger.utils import swag_from
 
 
-@user_views.route('users', strict_slashes=False)
+@app_views.route('/users', methods=['GET'], strict_slashes=False)
+@swag_from('documentation/user/all_users.yml')
 def get_users():
-    """ returns a list of all the users in db """
-    users = storage.all(User)
-    lst = [user.to_dict() for user in users.values()]
-    return jsonify(lst)
+    """
+    Retrieves the list of all user objects
+    or a specific user
+    """
+    all_users = storage.all(User).values()
+    list_users = []
+    for user in all_users:
+        list_users.append(user.to_dict())
+    return jsonify(list_users)
 
 
-@user_views.route('users/<user_id>', strict_slashes=False)
-def get_user_with_id_eq_user_id(user_id):
-    """ returns a user with id == user_id """
-    user = storage.get(User, user_id)
-    return jsonify(user.to_dict()) if user else abort(404)
-
-
-@user_views.route('users/<user_id>', strict_slashes=False,
-                  methods=["DELETE"])
-def delete_user_with_id_eq_user_id(user_id):
-    """ deletes a user with id == user_id """
+@app_views.route('/users/<user_id>', methods=['GET'], strict_slashes=False)
+@swag_from('documentation/user/get_user.yml', methods=['GET'])
+def get_user(user_id):
+    """ Retrieves an user """
     user = storage.get(User, user_id)
     if not user:
         abort(404)
-    user.delete()
-    storage.save()
-    return jsonify({})
+
+    return jsonify(user.to_dict())
 
 
-@user_views.route('users', strict_slashes=False,
-                  methods=["POST"])
-def create_user():
-    """ creates a new user """
-    try:
-        data = request.get_json()
-        if type(data) is not dict:
-            raise TypeError
-    except Exception:
-        return jsonify({
-            "error": "Not a JSON"
-            }), 400
-    email = data.get("email")
-    passwd = data.get("password")
+@app_views.route('/users/<user_id>', methods=['DELETE'],
+                 strict_slashes=False)
+@swag_from('documentation/user/delete_user.yml', methods=['DELETE'])
+def delete_user(user_id):
+    """
+    Deletes a user Object
+    """
 
-    if not email:
-        return jsonify({
-            "error": "Missing email"
-            }), 400
-
-    if not passwd:
-        return jsonify({
-            "error": "Missing password"
-            }), 400
-
-    user = User(**data)
-    user.save()
-    return jsonify(
-        user.to_dict()
-        ), 201
-
-
-@user_views.route('users/<user_id>', strict_slashes=False,
-                  methods=["PUT"])
-def update_user_with_id_eq_user_id(user_id):
-    """ updates a user's record """
     user = storage.get(User, user_id)
+
     if not user:
         abort(404)
-    try:
-        data = request.get_json()
-        if type(data) is not dict:
-            raise TypeError
-    except Exception:
-        return jsonify({
-            "error": "Not a JSON"
-            }), 400
 
-    dont_update = ["id", "email", "created_at", "updated_at"]
-    for skip in dont_update:
-        try:
-            del data[skip]
-        except Exception:
-            pass
-    for key in data:
-        setattr(user, key, data[key])
-    user.save()
+    storage.delete(user)
     storage.save()
-    dct = user.to_dict()
-    return jsonify(dct)
+
+    return make_response(jsonify({}), 200)
 
 
-@user_views.route('states/<state_id>/users', strict_slashes=False)
-def get_users_of_state(state_id):
-    """ returns list of users associated with state """
-    state = storage.get(State, state_id)
-    if not state:
+@app_views.route('/users', methods=['POST'], strict_slashes=False)
+@swag_from('documentation/user/post_user.yml', methods=['POST'])
+def post_user():
+    """
+    Creates a user
+    """
+    if not request.get_json():
+        abort(400, description="Not a JSON")
+
+    if 'email' not in request.get_json():
+        abort(400, description="Missing email")
+    if 'password' not in request.get_json():
+        abort(400, description="Missing password")
+
+    data = request.get_json()
+    instance = User(**data)
+    instance.save()
+    return make_response(jsonify(instance.to_dict()), 201)
+
+
+@app_views.route('/users/<user_id>', methods=['PUT'], strict_slashes=False)
+@swag_from('documentation/user/put_user.yml', methods=['PUT'])
+def put_user(user_id):
+    """
+    Updates a user
+    """
+    user = storage.get(User, user_id)
+
+    if not user:
         abort(404)
-    ls = [user.to_dict() for user in state.users]
-    return jsonify(ls)
 
+    if not request.get_json():
+        abort(400, description="Not a JSON")
 
-@user_views.route('states/<state_id>/users', strict_slashes=False,
-                  methods=["POST"])
-def create_linked_to_state_user(state_id):
-    """ returns list of users associated with state """
-    state = storage.get(State, state_id)
-    if not state:
-        abort(404)
-    try:
-        data = request.get_json()
-        if type(data) is not dict:
-            raise TypeError
-    except Exception:
-        return jsonify({
-                "error": "Not a JSON"
-            }), 400
-    name = data.get("name")
-    if not name:
-        return jsonify({
-                "error": "Missing name"
-            }), 400
+    ignore = ['id', 'email', 'created_at', 'updated_at']
 
-    user = User(**data)
-    # state.users.append(user)
-    user.state_id = state.id
-    user.save()
-    state.save()
-    dct = user.to_dict()
-    return(
-        jsonify(dct)
-        ), 201
+    data = request.get_json()
+    for key, value in data.items():
+        if key not in ignore:
+            setattr(user, key, value)
+    storage.save()
+    return make_response(jsonify(user.to_dict()), 200)
